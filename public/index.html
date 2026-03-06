@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CI/CD Demo App — GitHub Actions + EC2</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0f;
+      --surface: #12121a;
+      --card: #1a1a28;
+      --border: rgba(255,255,255,0.08);
+      --accent: #6c63ff;
+      --accent2: #00d4aa;
+
+      --text: #e8e8f0;
+      --muted: #8888a8;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Animated gradient background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse at 20% 20%, rgba(108,99,255,0.15) 0%, transparent 50%),
+                  radial-gradient(ellipse at 80% 80%, rgba(0,212,170,0.10) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo { display: flex; align-items: center; gap: 10px; font-size: 1.1rem; font-weight: 700; letter-spacing: -0.3px; }
+    .logo-dot { width: 10px; height: 10px; background: var(--accent); border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:0.7} }
+
+    .status-badge {
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(0,212,170,0.12); border: 1px solid rgba(0,212,170,0.3);
+      color: var(--accent2); padding: 6px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+    }
+    .status-dot { width: 7px; height: 7px; background: var(--accent2); border-radius: 50%; animation: pulse 1.5s infinite; }
+
+
+    .hero { text-align: center; padding: 80px 0 60px; }
+    .pipeline-tag {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(108,99,255,0.15); border: 1px solid rgba(108,99,255,0.35);
+      color: #a09bff; padding: 6px 16px; border-radius: 20px;
+      font-size: 0.78rem; font-weight: 600; letter-spacing: 0.5px; margin-bottom: 24px;
+      text-transform: uppercase;
+    }
+    h1 { font-size: clamp(2.2rem, 5vw, 3.4rem); font-weight: 800; letter-spacing: -1.5px; line-height: 1.1; margin-bottom: 20px; }
+    h1 span { background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .hero p { font-size: 1.1rem; color: var(--muted); max-width: 560px; margin: 0 auto 40px; line-height: 1.7; }
+
+
+    .pipeline {
+      display: flex; align-items: center; justify-content: center;
+      gap: 0; margin-bottom: 70px; flex-wrap: wrap; row-gap: 12px;
+    }
+    .pipe-step {
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+    }
+    .pipe-icon {
+      width: 56px; height: 56px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem; position: relative; transition: transform 0.2s;
+    }
+    .pipe-icon:hover { transform: translateY(-4px); }
+    .pipe-icon.active { border-color: var(--accent2); box-shadow: 0 0 20px rgba(0,212,170,0.2); }
+    .pipe-label { font-size: 0.72rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .pipe-arrow { width: 40px; height: 2px; background: linear-gradient(90deg, var(--border), var(--accent)); margin: 0 4px; margin-bottom: 28px; }
+
+
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 40px; }
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 24px;
+      transition: border-color 0.3s, transform 0.2s;
+    }
+    .card:hover { border-color: rgba(108,99,255,0.4); transform: translateY(-4px); }
+    .card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+    .card-icon { font-size: 1.4rem; }
+    .card-title { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+    .card-subtitle { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+    .info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.82rem; }
+    .info-row:last-child { border-bottom: none; }
+    .info-key { color: var(--muted); }
+    .info-val { font-weight: 600; color: var(--text); font-family: monospace; font-size: 0.8rem; }
+    .info-val.green { color: var(--accent2); }
+    .info-val.purple { color: #a09bff; }
+
+
+    .steps-section { margin-bottom: 50px; }
+    .section-title { font-size: 1.3rem; font-weight: 700; margin-bottom: 20px; letter-spacing: -0.5px; }
+    .step {
+      display: flex; gap: 16px; padding: 16px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; margin-bottom: 10px;
+      transition: border-color 0.3s;
+    }
+    .step:hover { border-color: rgba(108,99,255,0.3); }
+    .step-num {
+      width: 32px; height: 32px; min-width: 32px;
+      background: linear-gradient(135deg, var(--accent), #9b94ff);
+      border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      font-size: 0.8rem; font-weight: 700;
+    }
+    .step-content h4 { font-size: 0.9rem; font-weight: 600; margin-bottom: 4px; }
+    .step-content p { font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
+
+
+    footer {
+      text-align: center; padding: 30px 0;
+      border-top: 1px solid var(--border);
+      font-size: 0.8rem; color: var(--muted);
+    }
+    footer a { color: var(--accent2); text-decoration: none; }
+
+
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo">
+      <div class="logo-dot"></div>
+      CI/CD Demo App
+    </div>
+    <div class="status-badge">
+      <div class="status-dot"></div>
+      Live on AWS EC2
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="pipeline-tag">GitHub Actions + AWS EC2</div>
+    <h1>Automated <span>CI/CD Pipeline</span><br/>Deployment</h1>
+    <p>This application is automatically deployed to an AWS EC2 instance whenever code is pushed to the main branch via GitHub Actions.</p>
+
+    <!-- Pipeline Flow -->
+    <div class="pipeline">
+      <div class="pipe-step">
+        <div class="pipe-icon">💻</div>
+        <div class="pipe-label">Code Push</div>
+      </div>
+      <div class="pipe-arrow"></div>
+      <div class="pipe-step">
+        <div class="pipe-icon">🐙</div>
+        <div class="pipe-label">GitHub</div>
+      </div>
+      <div class="pipe-arrow"></div>
+      <div class="pipe-step">
+        <div class="pipe-icon">⚙️</div>
+        <div class="pipe-label">Actions</div>
+      </div>
+      <div class="pipe-arrow"></div>
+      <div class="pipe-step">
+        <div class="pipe-icon">🔍</div>
+        <div class="pipe-label">Test</div>
+      </div>
+      <div class="pipe-arrow"></div>
+      <div class="pipe-step">
+        <div class="pipe-icon active">🚀</div>
+        <div class="pipe-label">Deploy</div>
+      </div>
+      <div class="pipe-arrow"></div>
+      <div class="pipe-step">
+        <div class="pipe-icon active">✅</div>
+        <div class="pipe-label">Live</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Info Cards -->
+  <div class="cards">
+    <div class="card" id="server-card">
+      <div class="card-header">
+        <span class="card-icon">🖥️</span>
+        <div>
+          <div class="card-title">Server Information</div>
+          <div class="card-subtitle">Live EC2 instance details</div>
+        </div>
+      </div>
+      <div class="info-row"><span class="info-key">App Name</span><span class="info-val purple" id="app-name">Loading...</span></div>
+      <div class="info-row"><span class="info-key">Version</span><span class="info-val green" id="app-version">Loading...</span></div>
+      <div class="info-row"><span class="info-key">Environment</span><span class="info-val" id="app-env">Loading...</span></div>
+      <div class="info-row"><span class="info-key">Server</span><span class="info-val" id="server-name">Loading...</span></div>
+      <div class="info-row"><span class="info-key">Node.js</span><span class="info-val" id="node-version">Loading...</span></div>
+      <div class="info-row"><span class="info-key">Deployed At</span><span class="info-val" id="deploy-time">Loading...</span></div>
+    </div>
+
+    <div class="card" id="health-card">
+      <div class="card-header">
+        <span class="card-icon">❤️</span>
+        <div>
+          <div class="card-title">Health Status</div>
+          <div class="card-subtitle">Real-time server metrics</div>
+        </div>
+      </div>
+      <div class="info-row"><span class="info-key">Status</span><span class="info-val green" id="health-status">Loading...</span></div>
+      <div class="info-row"><span class="info-key">Hostname</span><span class="info-val" id="health-host">Loading...</span></div>
+      <div class="info-row"><span class="info-key">Uptime</span><span class="info-val green" id="health-uptime">Loading...</span></div>
+      <div class="info-row"><span class="info-key">Last Check</span><span class="info-val" id="health-time">Loading...</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-icon">🔧</span>
+        <div>
+          <div class="card-title">CI/CD Stack</div>
+          <div class="card-subtitle">Technologies used</div>
+        </div>
+      </div>
+      <div class="info-row"><span class="info-key">Source Control</span><span class="info-val purple">GitHub</span></div>
+      <div class="info-row"><span class="info-key">CI/CD Tool</span><span class="info-val purple">GitHub Actions</span></div>
+      <div class="info-row"><span class="info-key">Cloud Provider</span><span class="info-val green">AWS</span></div>
+      <div class="info-row"><span class="info-key">Server Type</span><span class="info-val green">EC2 (Ubuntu)</span></div>
+      <div class="info-row"><span class="info-key">Process Manager</span><span class="info-val">PM2</span></div>
+      <div class="info-row"><span class="info-key">Runtime</span><span class="info-val">Node.js 18 LTS</span></div>
+    </div>
+  </div>
+
+  <!-- Pipeline Steps -->
+  <section class="steps-section">
+    <div class="section-title">How the Pipeline Works</div>
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <h4>Code Push to GitHub</h4>
+        <p>Developer pushes code to the <code>main</code> branch. This event triggers the GitHub Actions workflow automatically.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <h4>Checkout &amp; Install Dependencies</h4>
+        <p>The GitHub Actions runner checks out the repository and runs <code>npm install</code> to install all Node.js dependencies.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <h4>Run Tests</h4>
+        <p>Automated tests are executed via <code>npm test</code>. If tests fail, the pipeline stops and deployment is aborted.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <h4>SSH Deploy to EC2</h4>
+        <p>On success, the runner SSHes into the EC2 instance, pulls the latest code, reinstalls dependencies, and restarts the app with PM2.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-content">
+        <h4>Health Check Verification</h4>
+        <p>After deployment, a health check is performed against <code>/health</code> to confirm the app is running correctly on the server.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>Cloud Assignment — Task 2 &nbsp;|&nbsp; Deployed with ❤️ using <a href="https://github.com/features/actions" target="_blank">GitHub Actions</a> &amp; <a href="https://aws.amazon.com/ec2/" target="_blank">AWS EC2</a></p>
+  </footer>
+</div>
+
+<script>
+  async function fetchInfo() {
+    try {
+      const [infoRes, healthRes] = await Promise.all([
+        fetch('/api/info'),
+        fetch('/health')
+      ]);
+      const info = await infoRes.json();
+      const health = await healthRes.json();
+
+      document.getElementById('app-name').textContent = info.app;
+      document.getElementById('app-version').textContent = 'v' + info.version;
+      document.getElementById('app-env').textContent = info.environment;
+      document.getElementById('server-name').textContent = info.server;
+      document.getElementById('node-version').textContent = info.nodeVersion;
+      document.getElementById('deploy-time').textContent = new Date(info.deployedAt).toLocaleString();
+
+      document.getElementById('health-status').textContent = health.status.toUpperCase();
+      document.getElementById('health-host').textContent = health.hostname;
+      document.getElementById('health-uptime').textContent = Math.floor(health.uptime) + 's';
+      document.getElementById('health-time').textContent = new Date(health.timestamp).toLocaleTimeString();
+    } catch (e) {
+      ['app-name','app-version','app-env','server-name','node-version','deploy-time',
+       'health-status','health-host','health-uptime','health-time'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = 'N/A';
+      });
+    }
+  }
+  fetchInfo();
+  setInterval(fetchInfo, 10000);
+</script>
+</body>
+</html>
